@@ -1,0 +1,11 @@
+(executable
+ (public_name cudf-check)
+ (name main_cudf_check)
+ (modules main_cudf_check)
+ (libraries cudf))
+
+(executable
+ (public_name cudf-parse-822)
+ (name main_cudf_parse_822)
+ (modules main_cudf_parse_822)
+ (libraries cudf))

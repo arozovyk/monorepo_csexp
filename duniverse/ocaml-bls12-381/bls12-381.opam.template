@@ -1,0 +1,11 @@
+available: arch != "arm32" & arch != "x86_32"
+x-ci-accept-failures: [
+  # because of -Werror
+  "centos-7"
+  "oraclelinux-7"
+]
+# Required for OCaml 5.0 on s390x, see
+# https://github.com/ocaml/opam-repository/pull/22753#discussion_r1067151343
+conflicts: [
+  "ocaml-option-bytecode-only"
+]

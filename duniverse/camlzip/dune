@@ -1,0 +1,25 @@
+(library
+ (public_name zip)
+ (synopsis "OCaml ZIP interface")
+ (modules gzip zip zlib)
+ (wrapped false)
+ (flags (:standard -warn-error -A))
+ (foreign_stubs
+  (language c)
+  (names zlibstubs)
+  (flags (:include c_flags.sexp)))
+ (c_library_flags
+  (:include c_library_flags.sexp)))
+
+(library
+ (public_name camlzip)
+ (wrapped false)
+ (modules)
+ (libraries (re_export zip)))
+
+(rule
+ (targets c_flags.sexp c_library_flags.sexp)
+ (deps
+  (:discover config/discover.exe))
+ (action
+  (run %{discover})))

@@ -1,0 +1,4 @@
+(lang dune 2.0)
+(name zarith)
+(version 1.12+dune)
+(formatting disabled)

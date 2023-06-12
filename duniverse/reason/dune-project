@@ -1,0 +1,6 @@
+(lang dune 2.3)
+
+(name reason)
+(version 3.8.2)
+
+(using menhir 2.0)

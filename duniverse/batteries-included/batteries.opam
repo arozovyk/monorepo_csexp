@@ -1,0 +1,32 @@
+version: "3.6.0+dune"
+opam-version: "2.0"
+synopsis: "A community-maintained standard library extension"
+maintainer: [
+  "Cedric Cellier <rixed@happyleptic.org>"
+  "Francois Berenger <unixjunkie@sdf.org>"
+  "Gabriel Scherer <gabriel.scherer@gmail.com>"
+  "Thibault Suzanne <thi.suzanne@gmail.com>"
+]
+authors: "OCaml batteries-included team"
+homepage: "https://github.com/dune-universe/batteries-included"
+bug-reports: "https://github.com/ocaml-batteries-team/batteries-included/issues"
+dev-repo: "git+https://github.com/dune-universe/batteries-included.git"
+license: "LGPL-2.1-or-later with OCaml-LGPL-linking-exception"
+build: [ "dune" "build" "-p" name "-j" jobs ]
+depends: [
+  "ocaml" {>= "4.02.3"}
+  "camlp-streams"
+  "qtest" {with-test & >= "2.5"}
+  "qcheck" {with-test & >= "0.9" & < "0.14"}
+  "benchmark" {with-test & >= "1.6"}
+  "num"
+  "dune" {>= "2.7"}
+]
+conflicts: [
+  "base-effects"
+  "ocaml-option-no-flat-float-array"
+]
+# url {
+#   src: "https://github.com/ocaml-batteries-team/batteries-included/archive/vXXX.tar.gz"
+#   checksum: "md5=YYY"
+# }

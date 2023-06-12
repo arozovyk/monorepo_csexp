@@ -1,0 +1,9 @@
+scratch/
+_build/
+*.install
+.merlin
+docs/html/
+docs/*.zip
+_coverage/
+_opam/
+.vscode/

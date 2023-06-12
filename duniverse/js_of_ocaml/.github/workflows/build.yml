@@ -1,0 +1,153 @@
+name: build
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  schedule:
+    # Prime the caches every Monday
+    - cron: 0 1 * * MON
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+        ocaml-compiler:
+          - 4.08.x
+          - 4.09.x
+          - 4.10.x
+          - 4.11.x
+          - 4.12.x
+          - 4.13.x
+        skip-test:
+          - true
+        skip-doc:
+          - true
+        skip-effects:
+          - true
+        include:
+          - os: ubuntu-latest
+            ocaml-compiler: 4.14.x
+            skip-effects: true
+            skip-test: false
+            skip-doc: true
+          - os: macos-latest
+            ocaml-compiler: 4.14.x
+            skip-effects: true
+            skip-test: false
+            skip-doc: true
+          - os: windows-latest
+            ocaml-compiler: 4.14.x
+            skip-effects: true
+            skip-test: false
+            skip-doc: true
+          - os: ubuntu-latest
+            ocaml-compiler: 5.0.x
+            skip-effects: false
+            skip-test: false
+            skip-doc: false
+          - os: macos-latest
+            ocaml-compiler: 5.0.x
+            skip-effects: true
+            skip-test: false
+            skip-doc: true
+          - os: windows-latest
+            ocaml-compiler: ocaml.5.0.0,ocaml-option-mingw
+            skip-effects: false
+            skip-test: false
+            skip-doc: true
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Set git to use LF
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+          git config --global core.ignorecase false
+
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Use Node.js 16.x
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16.x
+
+
+      - name: Use OCaml ${{ matrix.ocaml-compiler }}
+        if: runner.os == 'Windows'
+        uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: ${{ matrix.ocaml-compiler }}
+          opam-repositories: |
+            dra27: https://github.com/dra27/opam-repository.git#windows-5.0
+            default: https://github.com/hhugo/opam-repository-mingw.git#opam2
+            opam: https://github.com/ocaml/opam-repository.git
+          dune-cache: true
+          opam-depext: ${{ !matrix.skip-test }}
+          opam-depext-flags: --with-test
+
+      - name: Use OCaml ${{ matrix.ocaml-compiler }}
+        if: runner.os != 'Windows'
+        uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: ${{ matrix.ocaml-compiler }}
+          dune-cache: true
+          opam-depext: ${{ !matrix.skip-test }}
+          opam-depext-flags: --with-test
+
+      - run: opam pin add zarith git+https://github.com/dra27/Zarith.git#windows-cc
+        if: runner.os == 'Windows'
+
+      - run: opam install . --best-effort
+        if: ${{ matrix.skip-test }}
+
+      - run: opam install . --with-test
+        if: ${{ !matrix.skip-test }}
+
+      - run: opam exec -- make all
+        if: ${{ !matrix.skip-test }}
+
+      - run: opam exec -- make tests
+        if: ${{ !matrix.skip-test }}
+
+      - run: opam exec -- dune build @all @runtest --profile using-effects
+        if: ${{ !matrix.skip-effects }}
+
+      - run: opam exec -- git diff --exit-code
+        if: ${{ !matrix.skip-test }}
+
+      - name: build doc
+        if: ${{ !matrix.skip-doc && github.event_name == 'push' && github.ref == 'refs/heads/master'}}
+        run: |
+          opam install odoc lwt_log cohttp-lwt-unix yojson ocp-indent graphics higlo
+          opam exec -- make doc
+
+      - name: synchronize doc
+        if: ${{ !matrix.skip-doc && github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: wikidoc
+          folder: doc-dev
+          clean: true
+          target-folder: doc/dev/
+
+  lint-fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Use OCaml 4.14.x
+        uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: 4.14.x
+          dune-cache: true
+
+      - name: Lint fmt
+        uses: ocaml/setup-ocaml/lint-fmt@v2

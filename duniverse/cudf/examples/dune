@@ -1,0 +1,3 @@
+(executables
+ (names cudf_sort)
+ (libraries cudf))

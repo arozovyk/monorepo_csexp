@@ -1,0 +1,22 @@
+version: "3.8.2"
+opam-version: "2.0"
+maintainer: "Jordan Walke <jordojw@gmail.com>"
+authors: [ "Jordan Walke <jordojw@gmail.com>" ]
+license: "MIT"
+homepage: "https://github.com/reasonml/reason"
+doc: "https://reasonml.github.io/"
+bug-reports: "https://github.com/reasonml/reason/issues"
+dev-repo: "git+https://github.com/reasonml/reason.git"
+tags: [ "syntax" ]
+build: [
+  ["dune" "build" "-p" name "-j" jobs]
+]
+depends: [
+  "ocaml"  {>= "4.03" & < "5.1"}
+  "dune"   {>= "2.3"}
+  "reason" {=version}
+  "utop"   {>= "2.0"}
+]
+synopsis: "Reason toplevel"
+description:
+  "rtop is the toplevel (or REPL) for Reason, based on utop (https://github.com/diml/utop)."

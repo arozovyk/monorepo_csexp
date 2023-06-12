@@ -1,0 +1,13 @@
+(test
+ (name main)
+ (libraries canary lwt)
+ (preprocess
+  (pps lwt_ppx)))
+
+(env
+ (dev
+  (flags
+   (:standard -w -g)))
+ (release
+  (flags
+   (:standard -w -g))))

@@ -1,0 +1,5 @@
+(tests
+ (names test)
+ (modules test tests)
+ (deps (source_tree data))
+ (libraries cudf ounit2))

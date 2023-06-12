@@ -1,0 +1,7 @@
+version = "v0.9.8+dune"
+description = "Universally unique identifiers (UUIDs)"
+requires = "bytes"
+archive(byte) = "uuidm.cma"
+archive(native) = "uuidm.cmxa"
+plugin(byte) = "uuidm.cma"
+plugin(native) = "uuidm.cmxs"

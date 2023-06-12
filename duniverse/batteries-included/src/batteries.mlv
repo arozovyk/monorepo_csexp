@@ -1,0 +1,196 @@
+(* open this to extend all Foo with BatFoo *)
+
+module Legacy = struct
+##V<5##  include Pervasives
+##V>=5##  include Stdlib
+  module Arg = Arg
+  module Array = Array
+  module ArrayLabels = ArrayLabels
+  module Buffer = Buffer
+  module Bytes = Bytes
+  module Callback = Callback
+  module Char = Char
+  module Complex = Complex
+  module Digest = Digest
+##V>=4.12## module Either = Either
+  module Filename = Filename
+  module Format = Format
+  module Gc = Gc
+  module Genlex = Genlex
+  module Hashtbl = Hashtbl
+  module Int32 = Int32
+  module Int64 = Int64
+  module Lazy = Lazy
+  module Lexing = Lexing
+  module List = List
+  module ListLabels = ListLabels
+  module Map = Map
+  module Marshal = Marshal
+  module MoreLabels = MoreLabels
+  module Nativeint = Nativeint
+  module Oo = Oo
+  module Parsing = Parsing
+  module Printexc = Printexc
+  module Printf = Printf
+  module Queue = Queue
+  module Random = Random
+  module Scanf = Scanf
+  module Set = Set
+##V>=4.7##  module Seq = Seq
+##V<4.8## module Sort = Sort
+  module Stack = Stack
+  module StdLabels = StdLabels
+  module Stream = Stream
+  module String = String
+  module StringLabels = StringLabels
+  module Sys = Sys
+  module Weak = Weak
+  module Unix = Unix
+  module Num = Num
+  module Big_int = Big_int
+  module Bigarray = Bigarray
+  module Str = Str
+##V>=4.8## module Result = Result
+end
+
+(* stdlib modules *)
+(* Arg *)
+module Array = BatArray
+(* ArrayLabels *)
+module Buffer = BatBuffer
+module Bytes = BatBytes
+
+(* this type is a compiler builtin in OCaml V>=4.2,
+   and declared by BatBytes as equal to 'string' below;
+   this alias declaration makes the unqualified 'bytes' usable
+   by users V<=4.2, otherwise they can only use (Bat)Bytes.t
+*)
+type bytes = Bytes.t
+
+(* Callback *)
+module Char = BatChar
+module Complex = BatComplex
+module Digest = BatDigest
+module Either = BatEither
+(* Filename *)
+module Format = BatFormat
+module Gc = BatGc
+module Genlex = BatGenlex
+module Hashtbl = BatHashtbl
+module Int32 = BatInt32
+module Int64 = BatInt64
+(* Lazy *)
+module Lexing = BatLexing
+module List = BatList
+(* ListLabels *)
+module Map = BatMap
+module Marshal = BatMarshal
+(* MoreLabels *)
+module Nativeint = BatNativeint
+(* Parsing *)
+module Printexc = BatPrintexc
+module Printf = BatPrintf (* UNTESTED FOR BACKWARDS COMPATIBILITY *)
+module Queue = BatQueue
+module Random = BatRandom
+module Scanf = BatScanf
+module Set = BatSet
+(* Sort - Deprecated *)
+module Stack = BatStack
+module Stream = BatStream
+module String = BatString
+(* StringLabels *)
+module Sys = BatSys
+(* Weak *)
+
+module Unix = BatUnix
+
+(*module Str = struct include Str include BatStr end*)
+
+module Big_int = BatBig_int
+module Num = BatNum
+
+module Bigarray = BatBigarray
+
+(* Extlib modules not replacing stdlib *)
+module Base64 = BatBase64
+module BitSet = BatBitSet
+module Bit_set = BatBitSet
+module Dllist = BatDllist
+module DynArray = BatDynArray
+module Enum = BatEnum
+module File = BatFile
+module Global = BatGlobal
+module IO = BatIO
+module LazyList = BatLazyList
+module MultiPMap = BatMultiPMap
+module Option = BatOption
+(* REMOVED, Extlib only module OptParse = BatOptParse *)
+module RefList = BatRefList
+module Ref = BatRef
+(*module Std = REMOVED - use BatPervasives *)
+
+(* Batteries specific modules *)
+module Cache = BatCache
+module CharParser = BatCharParser
+module Deque = BatDeque
+module Hashcons = BatHashcons
+module Heap = BatHeap
+module FingerTree = BatFingerTree
+module Logger = BatLogger
+module MultiMap = BatMultiMap
+module ParserCo = BatParserCo
+module Result = BatResult
+module Return = BatReturn
+module Seq = BatSeq
+module Substring = BatSubstring
+module Tuple = BatTuple
+module Tuple2 = BatTuple.Tuple2
+module Tuple3 = BatTuple.Tuple3
+module Tuple4 = BatTuple.Tuple4
+module Tuple5 = BatTuple.Tuple5
+module Vect = BatVect
+module ISet = BatISet
+module IMap = BatIMap
+module Splay = BatSplay
+module Uref = BatUref
+module UChar = BatUChar
+module UTF8 = BatUTF8
+module Text = BatText
+module Concurrent = BatConcurrent
+
+(* Batteries Specific *)
+module Interfaces = BatInterfaces
+module Number = BatNumber
+module Float = BatFloat
+module Int = BatInt
+module Bool = BatBool
+module Unit = BatUnit
+(*module Int63 = BatInt63*)
+module Filename = BatFilename
+
+(* Modules in-progress, API stability not guaranteed *)
+module Incubator = struct
+  module Log = BatLog
+  module Bounded = BatBounded
+  module PathGen = BatPathGen
+end
+
+(* Pervasives last *)
+##V<4.3##include Pervasives
+##V<5####V>=4.3##include (Pervasives :
+##V<5####V>=4.3##  module type of Pervasives
+##V<5####V>=4.3##  with type ('a, 'b) result := ('a, 'b) Pervasives.result
+##V<5####V>=4.3##  and  type 'a ref = 'a Pervasives.ref
+##V<5####V>=4.3##  and  type fpclass = Pervasives.fpclass
+##V<5####V>=4.3##  and  type in_channel = Pervasives.in_channel
+##V<5####V>=4.3##  and  type out_channel = Pervasives.out_channel
+##V<5####V>=4.3##  and  type open_flag = Pervasives.open_flag
+##V<5####V>=4.3##  and  type ('a, 'b, 'c, 'd, 'e, 'f) format6 =
+##V<5####V>=4.3##    ('a, 'b, 'c, 'd, 'e, 'f) Pervasives.format6
+##V<5####V>=4.3##  and  type ('a, 'b, 'c, 'd) format4 =
+##V<5####V>=4.3##    ('a, 'b, 'c, 'd) Pervasives.format4
+##V<5####V>=4.3##  and  type ('a, 'b, 'c) format =
+##V<5####V>=4.3##    ('a, 'b, 'c) Pervasives.format
+##V<5####V>=4.3##)
+
+include BatPervasives

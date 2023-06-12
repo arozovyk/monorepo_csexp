@@ -1,0 +1,1379 @@
+(*
+ * BatString - Additional functions for string manipulations.
+ * Copyright (C) 2003 Nicolas Cannasse
+ *               2008 David Teller
+ *               2008 Edgar Friendly
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version,
+ * with the special exception on linking described in file LICENSE.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *)
+
+include String
+
+let compare = String.compare
+(*$T compare
+   compare "FOO" "bar" = -1
+*)
+
+let equal a b = String.compare a b = 0
+let ord = BatOrd.ord String.compare
+
+
+let init = BatBytesCompat.string_init
+
+(*$T init
+   init 5 (fun i -> BatChar.chr (i + int_of_char '0')) = "01234";
+ *)
+
+let of_bytes = Bytes.to_string
+let to_bytes = Bytes.of_string
+
+(* named alias for operator *)
+let cat = (^)
+
+let starts_with str p =
+  let len = length p in
+  if length str < len then false
+  else
+    (* length str >= length p *)
+    let rec loop str p i =
+      if i = len then true
+      else
+        (* 0 <= i < length p *)
+        if unsafe_get str i <> unsafe_get p i then false
+        else loop str p (i + 1)
+    in loop str p 0
+(*$T starts_with
+  starts_with "foobarbaz" "foob"
+  starts_with "foobarbaz" ""
+  starts_with "" ""
+  not (starts_with "bar" "foobar")
+  not (starts_with "" "foo")
+  starts_with "Jon \"Maddog\" Orwant" "Jon"
+  not (starts_with "Jon \"Maddog\" Orwant" "Jon \"Maddog\" Orwants")
+  not (starts_with "Jon \"Maddog\" Orwant" "Orwants")
+*)
+
+let starts_with_stdlib ~prefix s =
+  starts_with s prefix
+
+let for_all p s =
+  BatBytes.(for_all p (unsafe_of_string s))
+(* Bytes.for_all already has a unit test *)
+
+let ends_with str p =
+  let el = length p
+  and sl = length str in
+  let diff = sl - el in
+  (* diff = length str - length p *)
+  if diff < 0 then false (*string is too short*)
+  else
+    (* diff >= 0 *)
+    let rec loop str p diff i =
+      if i = el then true
+      else
+        (* 0 <= i < length p *)
+        (* diff = length str - length p  ==>  diff <= i + diff < length str *)
+        if unsafe_get str (diff + i) <> unsafe_get p i then false
+        else loop str p diff (i + 1)
+    in loop str p diff 0
+(*$T ends_with
+  ends_with "foobarbaz" "rbaz"
+  ends_with "foobarbaz" ""
+  ends_with "" ""
+  not (ends_with "foo" "foobar")
+  not (ends_with "" "foo")
+  ends_with "Jon \"Maddog\" Orwant" "want"
+  not (ends_with "Jon \"Maddog\" Orwant" "I'm Jon \"Maddog\" Orwant")
+  not (ends_with "Jon \"Maddog\" Orwant" "Jon")
+*)
+
+let ends_with_stdlib ~suffix s =
+  ends_with s suffix
+
+let find_from str pos sub =
+  let len = length str in
+  let sublen = length sub in
+  if pos < 0 || pos > len then invalid_arg "String.find_from";
+  if sublen = 0 then pos else
+    let rec find ~str ~sub i =
+      if i > len - sublen then raise Not_found
+      else
+        (* 0 <= i <= length str - length sub *)
+        let rec loop ~str ~sub i j =
+          if j = sublen then i
+          else
+            (* 0 <= j < length sub *)
+            (* ==>  0 <= i + j < length str *)
+            if unsafe_get str (i + j) <> unsafe_get sub j
+            then find ~str ~sub (i + 1)
+            else loop ~str ~sub i (j + 1)
+        in loop ~str ~sub i 0
+    in find ~str ~sub pos
+(*$Q find_from
+  (Q.triple Q.string Q.char Q.small_int) ~count:1000 (fun (s, c, ofs) -> \
+    let v1 = try `res (find_from s ofs (String.make 1 c)) with Not_found -> `nf | Invalid_argument _ -> `inv in \
+    let v2 = try `res (String.index_from s ofs c) with Not_found -> `nf | Invalid_argument _ -> `inv in \
+    (match v1, v2 with `res s1, `res s2 when s1 = s2 -> true | `nf, `nf | `inv, `inv -> true | _ -> false) \
+  )
+  (Q.triple Q.string Q.string Q.small_int) ~count:1000 (fun (s, s2, ofs) -> \
+    let v1 = try `res (ofs + find (String.sub s ofs (String.length s - ofs)) s2) with Not_found -> `nf | Invalid_argument _ -> `inv in \
+    let v2 = try `res (find_from s ofs s2) with Not_found -> `nf | Invalid_argument _ -> `inv in \
+    (match v1, v2 with `res s1, `res s2 when s1 = s2 -> true | `nf, `nf | `inv, `inv -> true | _ -> false) \
+  )
+*)
+(*$T find_from
+  find_from "foobarbaz" 4 "ba" = 6
+  find_from "foobarbaz" 7 "" = 7
+  try ignore (find_from "" 0 "a"); false with Not_found -> true
+  try ignore (find_from "foo" 2 "foo"); false with Not_found -> true
+  try ignore (find_from "foo" 3 "foo"); false with Not_found -> true
+  try ignore (find_from "foo" 4 "foo"); false with Invalid_argument _ -> true
+  try ignore (find_from "foo" (-1) "foo"); false with Invalid_argument _ -> true
+*)
+
+let find str sub = find_from str 0 sub
+(*$T find
+  find "foobarbaz" "bar" = 3
+  try ignore (find "foo" "bar"); false with Not_found -> true
+*)
+
+let rfind_from str pos sub =
+  let sublen = length sub
+  and len = length str in
+  if pos + 1 < 0 || pos + 1 > len then invalid_arg "String.rfind_from";
+  (* 0 <= pos + 1 <= length str *)
+  if sublen = 0 then pos + 1 else
+    (* length sub > 0 *)
+    (* (pos + 1 - sublen) <= length str - length sub < length str *)
+    let rec find ~str ~sub i =
+      if i < 0 then raise Not_found
+      else
+        (* 0 <= i <= length str - length sub < length str *)
+        let rec loop ~str ~sub i j =
+          if j = sublen then i
+          else
+            (* 0 <= j < length sub *)
+            (* ==> 0 <= i + j < length str *)
+            if unsafe_get str (i + j) <> unsafe_get sub j
+            then find ~str ~sub (i - 1)
+            else loop ~str ~sub i (j + 1)
+        in loop ~str ~sub i 0
+    in find ~str ~sub (pos - sublen + 1)
+(*$Q rfind_from
+  (Q.triple Q.string Q.char Q.small_int) ~count:1000 (fun (s, c, ofs) -> \
+    let v1 = try `res (rfind_from s ofs (String.make 1 c)) with Not_found -> `nf | Invalid_argument _ -> `inv in \
+    let v2 = try `res (String.rindex_from s ofs c) with Not_found -> `nf | Invalid_argument _ -> `inv in \
+    (match v1, v2 with `res s1, `res s2 when s1 = s2 -> true | `nf, `nf | `inv, `inv -> true | _ -> false) \
+  )
+  (Q.triple Q.string Q.string Q.small_int) ~count:1000 (fun (s, s2, ofs) -> \
+    let v1 = try `res (rfind (String.sub s 0 (ofs + 1)) s2) with Not_found -> `nf | Invalid_argument _ -> `inv in \
+    let v2 = try `res (rfind_from s ofs s2) with Not_found -> `nf | Invalid_argument _ -> `inv in \
+    (match v1, v2 with `res s1, `res s2 when s1 = s2 -> true | `nf, `nf | `inv, `inv -> true | _ -> false) \
+  )
+*)
+(*$T rfind_from
+  rfind_from "foobarbaz" 5 "ba" = 3
+  rfind_from "foobarbaz" 7 "ba" = 6
+  rfind_from "foobarbaz" 6 "ba" = 3
+  rfind_from "foobarbaz" 7 "" = 8
+  try ignore (rfind_from "" 3 ""); false with Invalid_argument _ -> true
+  try ignore (rfind_from "" (-1) "a"); false with Not_found -> true
+  try ignore (rfind_from "foobarbaz" 2 "ba"); false with Not_found -> true
+  try ignore (rfind_from "foo" 3 "foo"); false with Invalid_argument _ -> true
+  try ignore (rfind_from "foo" (-2) "foo"); false with Invalid_argument _ -> true
+*)
+
+let rfind str sub = rfind_from str (String.length str - 1) sub
+(*$T rfind
+  rfind "foobarbaz" "ba" = 6
+  try ignore (rfind "foo" "barr"); false with Not_found -> true
+*)
+
+let index_after_n chr n str =
+  if n < 0 then raise (Invalid_argument "String.index_after_n: n < 0")
+  else
+    let rec loop n i =
+      if n = 0 then i
+      else
+        let i = String.index_from str i chr in
+        loop (n - 1) (i + 1)
+    in
+    loop n 0
+
+(*$T index_after_n
+  index_after_n ',' 0 "aa,bb,cc" = 0
+  index_after_n ',' 1 "aa,bb,cc" = 3
+  index_after_n ',' 2 "aa,bb,cc" = 6
+  index_after_n ',' 0 "" = 0
+  index_after_n '-' 0 "aa,bb,cc" = 0
+  try ignore (index_after_n ',' (-1) "aa,bb,cc"); false with Invalid_argument _ -> true
+  try ignore (index_after_n ',' 3 "aa,bb,cc"); false with Not_found -> true
+  try ignore (index_after_n '-' 1 "aa,bb,cc"); false with Not_found -> true
+  index_after_n ',' 0 ",ab" = 0
+  index_after_n ',' 1 ",ab" = 1
+  index_after_n ',' 1 "a,,b" = 2
+  index_after_n ',' 2 "a,,b" = 3
+  index_after_n ',' 1 "a," = 2
+*)
+
+let find_all str sub =
+  (* enumerator *)
+  let next r () =
+    try
+      let i = find_from str !r sub in
+      r := i+1;
+      i
+    with Not_found -> raise BatEnum.No_more_elements
+  in
+  let count r () =
+    let n = ref 0 in
+    let r' = BatRef.copy r in
+    begin try while true do ignore (next r' ()); incr n; done;
+    with BatEnum.No_more_elements -> ();
+    end;
+    !n
+  in
+  let rec clone r () = make (BatRef.copy r)
+  and make r = BatEnum.make ~next:(next r) ~count:(count r) ~clone:(clone r)
+  in
+  let r = ref 0 in
+  make r
+
+(*$T find_all
+  find_all "aaabbaabaaa" "aa" |> List.of_enum = [0;1;5;8;9]
+  find_all "abcde" "bd" |> List.of_enum = []
+  find_all "baaaaaaaaaaaaaaaaaaaab" "baa" |> List.of_enum = [0]
+  find_all "aaabbaabaaa" "aa" |> Enum.skip 1 |> Enum.clone \
+    |> List.of_enum = [1;5;8;9]
+  find_all "aaabbaabaaa" "aa" |> Enum.skip 1 |> Enum.count = 4
+  find_all "" "foo" |> BatEnum.is_empty
+  let e = find_all "aaabbaabaaa" "aa" in \
+    Enum.drop 2 e; let e' = Enum.clone e in \
+    (List.of_enum e = [5;8;9]) && (Enum.skip 1 e' |> List.of_enum = [8;9])
+*)
+
+let count_string str sub =
+  if sub = "" then invalid_arg "String.count_string";
+  let m = length str in
+  let n = length sub in
+  let rec loop acc i =
+    if i >= m then
+      acc
+    else
+      try
+        let j = find_from str i sub in
+        loop (acc + 1) (j + n)
+      with Not_found -> acc
+  in
+  loop 0 0
+(*$T count_string
+  try let _ = count_string "abc" "" in false with Invalid_argument _ -> true
+  count_string "aaa" "a" = 3
+  count_string "aaa" "aa" = 1
+  count_string "coucou" "cou" = 2
+*)
+
+let exists str sub =
+  try
+    ignore (find str sub);
+    true
+  with
+    Not_found -> false
+(*$T exists
+   exists "foobarbaz" "obar"
+   exists "obar" "obar"
+   exists "foobarbaz" ""
+   exists "" ""
+   not (exists "foobar" "obb")
+   not (exists "" "foo")
+  exists "a" ""
+  not (exists "" "a")
+  exists "ab" "a"
+  exists "ab" "b"
+  not (exists "ab" "c")
+*)
+
+let exists_stdlib p s =
+  BatBytes.(exists p (unsafe_of_string s))
+
+let strip_default = " \t\r\n"
+let strip ?(chars = strip_default) s =
+  let p = ref 0 in
+  let l = length s in
+  while !p < l && contains chars (unsafe_get s !p) do
+    incr p;
+  done;
+  let p = !p in
+  let l = ref (l - 1) in
+  while !l >= p && contains chars (unsafe_get s !l) do
+    decr l;
+  done;
+  sub s p (!l - p + 1)
+(*$T strip
+   strip ~chars:" ,()" " boo() bar()" = "boo() bar"
+   strip ~chars:"abc" "abbcbab" = ""
+*)
+
+
+
+let left s len =
+  if len >= length s then s else sub s 0 len
+
+let right s len =
+  let slen = length s in
+  if len >= slen then s else sub s (slen - len) len
+
+let head s pos =
+  left s pos
+
+let tail s pos =
+  let slen = length s in
+  if pos >= slen then "" else sub s pos (slen - pos)
+
+(*$T left
+  left "abc" 1 = "a"
+  left "ab" 3 = "ab"
+  left "abc" 3 = "abc"
+  left "abc" 10 = "abc"
+  left "abc" 0 = ""
+*) (*$T right
+     right "abc" 1 = "c"
+     right "ab" 3 = "ab"
+     right "abc" 3 = "abc"
+     right "abc" 0 = ""
+     right "abc" 10 = "abc"
+   *) (*$T tail
+        tail "abc" 1 = "bc"
+        tail "ab" 3 = ""
+        tail "abc" 3 = ""
+        tail "abc" 10 = ""
+        tail "abc" 0 = "abc"
+      *) (*$T head
+        head "abc" 0 = ""
+        head "abc" 10 = "abc"
+        head "abc" 3 = "abc"
+      *)
+
+let split str ~by:sep =
+  let p = find str sep in
+  let len = length sep in
+  let slen = length str in
+  sub str 0 p, sub str (p + len) (slen - p - len)
+
+(*$T split
+   split "abcGxyzG123" ~by:"G" = ("abc","xyzG123")
+   split "abcGHIzyxGHI123" ~by:"GHI" = ("abc", "zyxGHI123")
+   split "abcGHIzyxGHI123" ~by:"" = ("", "abcGHIzyxGHI123")
+   try split "abcxyz" ~by:"G" |> ignore; false with Not_found -> true
+   split "abcabc" ~by:"abc" = ("", "abc")
+   split "abcabcd" ~by:"abcd" = ("abc", "")
+*)
+
+let rsplit str ~by:sep =
+  let p = rfind str sep in
+  let len = length sep in
+  let slen = length str in
+  sub str 0 p, sub str (p + len) (slen - p - len)
+(*$T rsplit
+  rsplit "abcGxyzG123" ~by:"G" = ("abcGxyz","123")
+   rsplit "abcGHIzyxGHI123" ~by:"GHI" = ("abcGHIzyx", "123")
+   rsplit "abcGHIzyxGHI123" ~by:"" = ("abcGHIzyxGHI123", "")
+   try rsplit "abcxyz" ~by:"G" |> ignore; false with Not_found -> true
+*)
+
+(* An implementation of [split_on_string]. *)
+let split_on_string_comp ?(on_empty=[""]) ~by:sep str =
+  if str = "" then on_empty
+  else if sep = "" then invalid_arg "String.split_on_string: empty sep not allowed"
+  else
+    (* str is not empty *)
+    let len = String.length str in
+    let seplen = String.length sep in
+    let rec loop acc curr =
+      if curr = len then
+        List.rev ("" :: acc) (* for compatibility with old behavior *)
+      else
+        try
+          let i = find_from str curr sep in
+          let tok = sub str curr (i - curr) in
+          let next = i + seplen in
+          loop (tok :: acc) next
+        with Not_found ->
+          let rest = sub str curr (len - curr) in
+          List.rev (rest :: acc)
+    in
+    loop [] 0
+
+let nsplit str ~by = split_on_string_comp ~on_empty:[] ~by str
+
+let split_on_string ~by str = split_on_string_comp ~by str
+
+(*$T split_on_string
+  split_on_string ~by:";" "a;b;c" = ["a"; "b"; "c"]
+  split_on_string ~by:"x" "" = [""]
+  try split_on_string ~by:"" "abc" = ["a"; "b"; "c"] with Invalid_argument _ -> true
+  split_on_string ~by:"/" "a/b/c" = ["a"; "b"; "c"]
+  split_on_string ~by:"/" "/a/b/c//" = [""; "a"; "b"; "c"; ""; ""]
+  split_on_string ~by:"FOO" "FOOaFOObFOOcFOOFOO" = [""; "a"; "b"; "c"; ""; ""]
+  split_on_string ~by:"//" "before///after" = ["before"; "/after"] (* bug/issue #1088 *)
+*)
+
+let split_on_char sep str =
+  if str = "" then [""]
+  else
+    (* str is non empty *)
+    let rec loop acc ofs limit =
+      if ofs < 0 then sub str 0 limit :: acc
+      (* ofs >= 0 && ofs < length str *)
+      else if unsafe_get str ofs <> sep then loop acc (ofs - 1) limit
+      else loop (sub str (ofs + 1) (limit - ofs - 1) :: acc) (ofs - 1) ofs
+    in
+    let len = length str in loop [] (len - 1) len
+
+(*$T split_on_char
+  split_on_char ';' "a;b;c" = ["a"; "b"; "c"]
+  split_on_char 'x' "" = [""]
+  split_on_char '/' "a/b/c" = ["a"; "b"; "c"]
+  split_on_char '/' "/a/b/c//" = [""; "a"; "b"; "c"; ""; ""]
+*)
+
+let cut_on_char chr pos str =
+  let i = index_after_n chr pos str in
+  let j = try index_from str i chr with Not_found -> length str in
+  sub str i (j - i)
+
+(*$T cut_on_char
+  cut_on_char ',' 0 "aa,bb,cc" = "aa"
+  cut_on_char ',' 1 "aa,bb,cc" = "bb"
+  cut_on_char ',' 2 "aa,bb,cc" = "cc"
+  cut_on_char '-' 0 "aa,bb,cc" = "aa,bb,cc"
+  cut_on_char ',' 0 "" = ""
+  try ignore (cut_on_char ',' (-1) "aa,bb,cc"); false with Invalid_argument _ -> true
+  try ignore (cut_on_char ',' 3 "aa,bb,cc"); false with Not_found -> true
+  try ignore (cut_on_char '-' 1 "aa,bb,cc"); false with Not_found -> true
+  cut_on_char ',' 0 ",ab" = ""
+  cut_on_char ',' 1 "a,,b" = ""
+  cut_on_char ',' 1 "a," = ""
+*)
+
+let join = concat
+
+let unsafe_slice i j s =
+  if i >= j || i = length s then
+    ""
+  else
+    sub s i (j-i)
+
+let clip ~lo ~hi (x:int) = if x < lo then lo else if x > hi then hi else x
+let wrap (x:int) ~hi = if x < 0 then hi + x else x
+let slice ?(first = 0) ?(last = Sys.max_string_length) s =
+  let lo = 0 and hi = length s in
+  let i = clip ~lo ~hi (wrap first ~hi) in
+  let j = clip ~lo ~hi (wrap last ~hi) in
+  unsafe_slice i j s
+
+(*$T slice
+   slice ~first:1 ~last:(-3) " foo bar baz" = "foo bar "
+   slice "foo" = "foo"
+   slice ~first:0 ~last:10 "foo" = "foo"
+   slice ~first:(-2) "foo" = "oo"
+   slice ~first:(-3) ~last:(-1) "foob" = "oo"
+   slice ~first:5 ~last:4 "foobarbaz" = ""
+*)
+
+
+let lchop ?(n = 1) s =
+  if n < 0 then
+    invalid_arg "String.lchop: number of characters to chop is negative"
+  else
+    let slen = length s in
+    if slen <= n then "" else sub s n (slen - n)
+(*$T lchop
+   lchop "Weeble" = "eeble"
+   lchop "" = ""
+   lchop ~n:3 "Weeble" = "ble"
+   lchop ~n:1000 "Weeble" = ""
+   lchop ~n:0 "Weeble" = "Weeble"
+   try ignore (lchop ~n:(-1) "Weeble"); false with Invalid_argument _ -> true
+*)
+
+let rchop ?(n = 1) s =
+  if n < 0 then
+    invalid_arg "String.rchop: number of characters to chop is negative"
+  else
+    let slen = length s in
+    if slen <= n then "" else sub s 0 (slen - n)
+(*$T rchop
+   rchop "Weeble" = "Weebl"
+   rchop "" = ""
+   rchop ~n:3 "Weeble" = "Wee"
+   rchop ~n:1000 "Weeble" = ""
+   try ignore (rchop ~n:(-1) "Weeble"); false with Invalid_argument _ -> true
+*)
+
+let chop ?(l = 1) ?(r = 1) s =
+  if l < 0 then
+    invalid_arg "String.chop: number of characters to chop on the left is negative";
+  if r < 0 then
+    invalid_arg "String.chop: number of characters to chop on the right is negative";
+  let slen = length s in
+  if slen < l + r then ""
+  else sub s l (slen - l - r)
+(*$T chop
+   chop "\"Weeble\"" = "Weeble"
+   chop "" = ""
+   chop ~l:2 ~r:3 "01234567" = "234"
+   chop ~l:1000 "Weeble" = ""
+   chop ~r:1000 "Weeble" = ""
+   try ignore (chop ~l:(-1) "Weeble"); false with Invalid_argument _ -> true
+   try ignore (chop ~r:(-1) "Weeble"); false with Invalid_argument _ -> true
+*)
+
+let of_int = string_of_int
+(*$T of_int
+   of_int 56 = "56"
+   of_int (-1) = "-1"
+*)
+
+let of_float = string_of_float
+
+let of_char = make 1
+(*$T of_char
+   of_char 's' = "s"
+   of_char '\000' = "\000"
+*)
+
+let to_int s = int_of_string s
+(*$T to_int
+   to_int "8_480" = to_int "0x21_20"
+   try ignore (to_int ""); false with Failure "int_of_string" -> true
+   try ignore (to_int "2,3"); false with Failure "int_of_string" -> true
+*)
+
+let to_float s = float_of_string s
+(*$T to_float
+   to_float "12.34e-1" = to_float "1.234"
+   to_float "1" = 1.
+   try ignore (to_float ""); false with Failure _ -> true
+*)
+
+let enum s =
+  let l = length s in
+  let rec make i =
+    BatEnum.make
+      ~next:(fun () ->
+        if !i = l then
+          raise BatEnum.No_more_elements
+        else
+          unsafe_get s (BatRef.post_incr i)
+      )
+      ~count:(fun () -> l - !i)
+      ~clone:(fun () -> make (BatRef.copy i))
+  in
+  make (ref 0)
+(*$T enum
+   "" |> enum |> List.of_enum = []
+   "foo" |> enum |> List.of_enum = ['f'; 'o'; 'o']
+   let e = enum "abcdef" in \
+   for _i = 0 to 2 do BatEnum.junk e done; \
+   let e2 = BatEnum.clone e in \
+   implode (BatList.of_enum e) = "def" && implode (BatList.of_enum e2) = "def"
+*)
+
+let backwards s =
+  let rec make i =
+    BatEnum.make
+      ~next:(fun () ->
+        if !i <= 0 then
+          raise BatEnum.No_more_elements
+        else
+          unsafe_get s (BatRef.pre_decr i)
+      )
+      ~count:(fun () -> !i)
+      ~clone:(fun () -> make (BatRef.copy i))
+  in
+  make (ref (length s))
+(*$T backwards
+   "" |> backwards |> of_enum = ""
+   "foo" |> backwards |> of_enum = "oof"
+   let e = backwards "abcdef" in \
+   for _i = 0 to 2 do BatEnum.junk e done; \
+   let e2 = BatEnum.clone e in \
+   implode (BatList.of_enum e) = "cba" && implode (BatList.of_enum e2) = "cba"
+*)
+
+let of_enum e =
+  (* TODO: use a buffer when not fast_count *)
+  let l = BatEnum.count e in
+  let s = Bytes.create l in
+  let i = ref 0 in
+  BatEnum.iter (fun c -> Bytes.unsafe_set s (BatRef.post_incr i) c) e;
+  Bytes.unsafe_to_string s
+(*$T of_enum
+    Enum.init 3 (fun i -> char_of_int (i + int_of_char '0')) |> of_enum = "012"
+    Enum.init 0 (fun _i -> ' ') |> of_enum = ""
+*)
+
+let of_backwards e =
+  (* TODO: use a buffer when not fast_count *)
+  let l = BatEnum.count e in
+  let s = Bytes.create l in
+  let i = ref (l - 1) in
+  BatEnum.iter (fun c -> Bytes.unsafe_set s (BatRef.post_decr i) c) e;
+  Bytes.unsafe_to_string s
+
+(*$T of_backwards
+   "" |> enum |> of_backwards = ""
+   "foo" |> enum |> of_backwards = "oof"
+   "foo" |> backwards |> of_backwards = "foo"
+*)
+
+let map f s =
+  let len = length s in
+  let sc = Bytes.create len in
+  for i = 0 to len - 1 do
+    Bytes.unsafe_set sc i (f (unsafe_get s i))
+  done;
+  Bytes.unsafe_to_string sc
+(*$T map
+   map Char.uppercase_ascii "Five" = "FIVE"
+   map Char.uppercase_ascii "" = ""
+   map (String.of_char %> failwith) "" = ""
+*)
+
+let mapi f s =
+  let len = length s in
+  let sc = Bytes.create len in
+  for i = 0 to len - 1 do
+    Bytes.unsafe_set sc i (f i (unsafe_get s i))
+  done;
+  Bytes.unsafe_to_string sc
+(*$T mapi
+   mapi (fun _ -> Char.uppercase_ascii) "Five" = "FIVE"
+   mapi (fun _ -> Char.uppercase_ascii) "" = ""
+   mapi (fun _ -> String.of_char %> failwith) "" = ""
+   mapi (fun i _c -> "0123456789".[9-i]) "0123456789" = "9876543210"
+   ignore (let last = ref (-1) in mapi (fun i _c -> assert (i > !last); last := i; '0') "012345"); true
+*)
+
+let filter_map f s =
+  let len = length s in
+  let sc = Buffer.create len in
+  for i = 0 to len - 1 do
+    match f (unsafe_get s i) with
+    | Some c -> Buffer.add_char sc c
+    | None -> ()
+  done;
+  Buffer.contents sc
+(*$T filter_map
+   filter_map (function 'a'..'z' as c -> Some (Char.uppercase_ascii c) | _ -> None) "a b c" = "ABC"
+*)
+
+let filter f s =
+  let len = length s in
+  let sc = Buffer.create len in
+  for i = 0 to len - 1 do
+    let c = unsafe_get s i in
+    if f c then Buffer.add_char sc c
+  done;
+  Buffer.contents sc
+(*$T filter
+   filter ((<>) ' ') "a b c" = "abc"
+*)
+
+(* fold_left and fold_right by Eric C. Cooper *)
+let fold_left f init str =
+  let n = String.length str in
+  let rec loop i result =
+    if i = n then result
+    else loop (i + 1) (f result (unsafe_get str i))
+  in
+  loop 0 init
+(*$T fold_left
+   fold_left (fun li c -> c::li) [] "foo" = ['o';'o';'f']
+   fold_left max 'a' "apples" = 's'
+*)
+
+let count_char str char =
+  let count = ref 0 in
+  let n = length str in
+  for i = 0 to n - 1 do
+    if (unsafe_get str i) = char then
+      incr count
+  done;
+  !count
+(*$T count_char
+  count_char "abc" 'd' = 0
+  count_char "" 'd' = 0
+  count_char "dad" 'd' = 2
+*)
+
+let fold_lefti f init str =
+  let n = String.length str in
+  let rec loop i result =
+    if i = n then result
+    (* i >= 0 && i < len str *)
+    else loop (i + 1) (f result i (unsafe_get str i))
+  in loop 0 init
+(*$T fold_lefti
+   fold_lefti (fun a i c->(i,c)::a) [] "foo"=[(2,'o');(1,'o');(0,'f')]
+   fold_lefti (fun a i _->i+a) 0 "" = 0
+*)
+
+
+let fold_right f str init =
+  let n = String.length str in
+  let rec loop i result =
+    if i = 0 then result
+    else
+      (* i > 0 && i <= len str *)
+      let i' = i - 1 in
+      (* i' >= 0 && i' < len str *)
+      loop i' (f (unsafe_get str i') result)
+  in
+  loop n init
+(*$T fold_right
+   fold_right List.cons "foo" [] = ['f';'o';'o']
+   fold_right (fun c a -> if c = ' ' then a+1 else a) "a b c" 0 = 2
+*)
+
+let fold_righti f str init =
+  let n = String.length str in
+  let rec loop i result =
+    if i = 0 then result
+    else
+      (* i > 0 && i <= len str *)
+      let i' = i - 1 in
+      (* i' >= 0 && i' < len str *)
+      loop i' (f i' (unsafe_get str i') result)
+  in loop n init
+(*$T fold_righti
+   fold_righti (fun i c a->(i,c)::a) "foo" []=[(0,'f');(1,'o');(2,'o')]
+   fold_righti (fun i _ a -> a + i) "" 0 = 0
+*)
+
+let iteri f str =
+  for i = 0 to String.length str - 1 do
+    f i (unsafe_get str i)
+  done
+(*$R iteri
+  let letter_positions word =
+    let positions = Array.make 256 [] in
+    let count_letter pos c =
+      positions.(int_of_char c) <- pos :: positions.(int_of_char c) in
+    iteri count_letter word;
+    Array.mapi (fun c pos -> (char_of_int c, List.rev pos)) positions
+    |> Array.to_list
+    |> List.filter (fun (_c, pos) -> pos <> [])
+  in
+  assert_equal ~msg:"String.iteri test"
+     (letter_positions "hello")
+     ['e',[1]; 'h',[0]; 'l',[2;3]; 'o',[4] ]
+*)
+
+(* explode and implode from the OCaml Expert FAQ. *)
+let explode s =
+  let rec loop i l =
+    if i < 0 then
+      l
+    else
+      (* i >= 0 && i < length s *)
+      loop (i - 1) (unsafe_get s i :: l)
+  in
+  loop (String.length s - 1) []
+(*$T explode
+   explode "foo" = ['f'; 'o'; 'o']
+   explode "" = []
+*)
+
+
+let to_list = explode
+(*$T to_list
+   to_list "string" |> List.interleave ';' |> of_list = "s;t;r;i;n;g"
+*)
+
+let implode l =
+  let res = Bytes.create (List.length l) in
+  let rec imp i = function
+    | [] -> ()
+    | c :: l -> Bytes.set res i c; imp (i + 1) l in
+  imp 0 l;
+  Bytes.unsafe_to_string res
+(*$T implode
+   implode ['b';'a';'r'] = "bar"
+   implode [] = ""
+*)
+
+
+let of_list = implode
+(*$T of_list
+   ['c'; 'h'; 'a'; 'r'; 's'] |> of_list = "chars"
+   [] |> of_list = ""
+*)
+
+let replace_chars f s =
+  let len = String.length s in
+  let tlen = ref 0 in
+  let rec loop i acc =
+    if i = len then
+      acc
+    else
+      let s = f (unsafe_get s i) in
+      tlen := !tlen + length s;
+      loop (i+1) (s :: acc)
+  in
+  let strs = loop 0 [] in
+  let sbuf = Bytes.create !tlen in
+  let pos = ref !tlen in
+  let rec loop2 = function
+    | [] -> ()
+    | s :: acc ->
+      let len = length s in
+      pos := !pos - len;
+      Bytes.blit_string s 0 sbuf !pos len;
+      loop2 acc
+  in
+  loop2 strs;
+  Bytes.unsafe_to_string sbuf
+(*$T replace_chars
+   replace_chars (function ' ' -> "(space)" | c -> of_char c) "foo bar" = "foo(space)bar"
+   replace_chars (fun _ -> "") "foo" = ""
+   replace_chars (fun _ -> assert false) "" = ""
+*)
+
+let replace ~str ~sub ~by =
+   try
+     let subpos = find str sub in
+     let strlen = length str in
+     let sublen = length sub in
+     let bylen  = length by in
+     let newstr = Bytes.create (strlen - sublen + bylen) in
+     blit str 0 newstr 0 subpos ;
+     blit by 0 newstr subpos bylen ;
+     blit str (subpos + sublen) newstr (subpos + bylen) (strlen - subpos - sublen) ;
+     (true, Bytes.unsafe_to_string newstr)
+   with Not_found ->  (* find failed *)
+     (false, str)
+(*$T replace
+   replace ~str:"foobarbaz" ~sub:"bar" ~by:"rab" = (true, "foorabbaz")
+   replace ~str:"foo" ~sub:"bar" ~by:"" = (false, "foo")
+*)
+
+
+let nreplace ~str ~sub ~by =
+  if sub = "" then
+    invalid_arg "String.nreplace: cannot replace all empty substrings" ;
+  let strlen = length str in
+  let sublen = length sub in
+  let bylen = length by in
+  let dlen = bylen - sublen in
+  let rec loop_subst idxes newlen i =
+    match (try rfind_from str (i-1) sub with Not_found -> -1) with
+    | -1 -> idxes, newlen
+    | i' -> loop_subst (i'::idxes) (newlen+dlen) i' in
+  let idxes, newlen = loop_subst [] strlen strlen in
+  let newstr = Bytes.create newlen in
+  let rec loop_copy i j idxes =
+    match idxes with
+    | [] ->
+      (* still need the last chunk *)
+      Bytes.blit_string str i newstr j (strlen-i)
+    | i'::rest ->
+      let di = i' - i in
+      Bytes.blit_string str i newstr j di ;
+      Bytes.blit_string by 0 newstr (j + di) bylen ;
+      loop_copy (i + di + sublen) (j + di + bylen) rest in
+  loop_copy 0 0 idxes ;
+  Bytes.unsafe_to_string newstr
+(*$T nreplace
+   nreplace ~str:"bar foo aaa bar" ~sub:"aa" ~by:"foo" = "bar foo afoo bar"
+   nreplace ~str:"bar foo bar" ~sub:"bar" ~by:"foo" = "foo foo foo"
+   nreplace ~str:"aaaaaa" ~sub:"aa" ~by:"aaa" = "aaaaaaaaa"
+   nreplace ~str:"" ~sub:"aa" ~by:"bb" = ""
+   nreplace ~str:"foo bar baz" ~sub:"foo bar baz" ~by:"" = ""
+   nreplace ~str:"abc" ~sub:"abc" ~by:"def" = "def"
+*)
+
+
+let rev_in_place s =
+  let len = Bytes.length s in
+  if len > 0 then for k = 0 to (len - 1)/2 do
+      let old = Bytes.get s k and mirror = len - 1 - k in
+      Bytes.set s k (Bytes.get s mirror);
+      Bytes.set s mirror old;
+    done
+(*$= rev_in_place as f & ~printer:identity
+  (let s=Bytes.of_string "" in f s; Bytes.to_string s) ""
+  (let s=Bytes.of_string "1" in f s; Bytes.to_string s) "1"
+  (let s=Bytes.of_string "12" in f s; Bytes.to_string s) "21"
+  (let s=Bytes.of_string "Example!" in f s; Bytes.to_string s) "!elpmaxE"
+*)
+
+let in_place_mirror = rev_in_place
+
+let repeat s n =
+  let buf = Buffer.create ( n * (String.length s) ) in
+  for _i = 1 to n do Buffer.add_string buf s done;
+  Buffer.contents buf
+(*$T repeat
+   repeat "fo" 4 = "fofofofo"
+   repeat "fo" 0 = ""
+   repeat "" 4 = ""
+*)
+
+let rev s =
+  let len = String.length s in
+  let reversed = Bytes.create len in
+  for i = 0 to len - 1 do
+    Bytes.unsafe_set reversed (len - i - 1) (unsafe_get s i)
+  done;
+  Bytes.unsafe_to_string reversed
+
+(*$T rev
+   rev "" = ""
+   rev "batteries" = "seirettab"
+   rev "even" = "neve"
+*)
+
+let trim s =
+  let len = length s in
+  let rec aux_1 i = (*locate leading whitespaces*)
+    if i = len then None (*The whole string is whitespace*)
+    else if BatChar.is_whitespace (unsafe_get s i) then aux_1 (i + 1)
+    else Some i in
+  match aux_1 0 with
+  | None -> ""
+  | Some last_leading_whitespace ->
+    let rec aux_2 i =
+      assert (i >= 0);
+      if BatChar.is_whitespace (unsafe_get s i) then aux_2 (i - 1)
+      else i in
+    let first_trailing_whitespace = aux_2 (len - 1) in
+    unsafe_slice last_leading_whitespace (first_trailing_whitespace + 1) s
+
+(*$T trim
+   trim " \t foo\n  " = "foo"
+   trim " foo bar " = "foo bar"
+   trim "  \t " = ""
+   trim "" = ""
+*)
+
+let splice s1 off len s2 =
+  let len1 = length s1 and len2 = length s2 in
+  let off = wrap off ~hi:len1 in
+  let len = clip ~lo:0 ~hi:(len1 - off) len in
+  let out_len = len1 - len + len2 in
+  let s = Bytes.create out_len in
+  Bytes.blit_string s1 0 s 0 off; (* s1 before splice point *)
+  Bytes.blit_string s2 0 s off len2; (* s2 at splice point *)
+  Bytes.blit_string (* s1 after off+len *)
+    s1 (off+len) s (off+len2) (len1 - (off+len));
+  Bytes.unsafe_to_string s
+(*$T splice
+   splice "foo bar baz" 3 5 "XXX" = "fooXXXbaz"
+   splice "foo bar baz" 5 0 "XXX" = "foo bXXXar baz"
+   splice "foo bar baz" 5 (-10) "XXX" = "foo bXXXar baz"
+   splice "foo bar baz" 5 50 "XXX" = "foo bXXX"
+   splice "foo bar baz" (-4) 2 "XXX" = "foo barXXXaz"
+   splice "bar baz" (-4) 2 "XXX" = "barXXXaz"
+*)
+
+let empty = ""
+
+let is_empty s = length s = 0
+(*$T is_empty
+   is_empty ""
+   not (is_empty "foo")
+   is_empty (String.make 0 'a')
+*)
+
+let icompare s1 s2 = compare
+##V<5## (String.lowercase s1) (String.lowercase s2)
+##V>=5## (String.lowercase_ascii s1) (String.lowercase_ascii s2)
+(*$T icompare
+   icompare "FOO" "bar" = 1
+*)
+
+type t_alias = t (* needed for IString breaks type t = t *)
+
+module IString =
+struct
+  type t = t_alias
+  let compare = icompare
+end
+
+let numeric_compare s1 s2 =
+  let e1 = BatEnum.group BatChar.is_digit (enum s1) in
+  let e2 = BatEnum.group BatChar.is_digit (enum s2) in
+  BatEnum.compare (fun g1 g2 ->
+    let s1 = of_enum g1 in
+    let s2 = of_enum g2 in
+    if BatChar.is_digit s1.[0] && BatChar.is_digit s2.[0] then
+      let n1 = Big_int.big_int_of_string s1 in
+      let n2 = Big_int.big_int_of_string s2 in
+      Big_int.compare_big_int n1 n2
+    else
+      String.compare s1 s2
+  ) e1 e2
+
+(*$T numeric_compare
+   numeric_compare "xx43" "xx320" = -1
+   numeric_compare "xx3" "xx21" = -1
+   numeric_compare "xx02" "xx2" = 0
+   numeric_compare "xx20" "xx5" = 1
+   numeric_compare "abc" "def" = compare "abc" "def"
+   numeric_compare "x50y" "x51y" = -1
+   numeric_compare "a23d" "a234" < 0
+   numeric_compare "a234" "a23d" > 0
+   numeric_compare "a1b" "a01c" < 0
+   numeric_compare "a1b" "a01b" = 0
+   numeric_compare "a1b2" "a01b01" > 0
+*)
+
+(*$Q numeric_compare
+  (Q.triple Q.printable_string Q.pos_int Q.pos_int) (fun (s,m,n) -> numeric_compare (s ^ string_of_int m) (s ^ string_of_int n) = BatInt.compare m n)
+*)
+
+##V<4.3##let uppercase_ascii s = map BatChar.uppercase_ascii s
+##V<4.3##let lowercase_ascii s = map BatChar.lowercase_ascii s
+
+(*$T uppercase_ascii
+  equal ("five" |> uppercase_ascii) "FIVE"
+  equal ("école" |> uppercase_ascii) "éCOLE"
+ *)
+
+(*$T lowercase_ascii
+  equal ("FIVE" |> lowercase_ascii) "five"
+  equal ("ÉCOLE" |> lowercase_ascii) "École"
+ *)
+
+##V<4.3##let map_first_char f s =
+##V<4.3##  let r = Bytes.of_string s in
+##V<4.3##  if Bytes.length r > 0 then
+##V<4.3##    Bytes.unsafe_set r 0 (f (unsafe_get s 0));
+##V<4.3##  Bytes.unsafe_to_string r
+
+##V<4.3##let capitalize_ascii s = map_first_char BatChar.uppercase_ascii s
+##V<4.3##let uncapitalize_ascii s = map_first_char BatChar.lowercase_ascii s
+
+(*$T capitalize_ascii
+  equal ("five" |> capitalize_ascii) "Five"
+  equal ("école" |> capitalize_ascii) "école"
+ *)
+
+(*$T uncapitalize_ascii
+  equal ("Five" |> uncapitalize_ascii) "five"
+  equal ("École" |> uncapitalize_ascii) "École"
+ *)
+
+module NumString =
+struct
+  type t = t_alias
+  let compare = numeric_compare
+end
+
+module A = Array
+
+let edit_distance s1 s2 =
+  let len1 = String.length s1 in
+  let len2 = String.length s2 in
+  if len1 = 0
+    then len2
+  else if len2 = 0
+    then len1
+  else if s1 = s2
+    then 0
+  else begin
+    (* distance vectors (v0=previous, v1=current) *)
+    let v0 = A.make (len2 + 1) 0 in
+    let v1 = A.make (len2 + 1) 0 in
+    (* initialize v0: v0(i) = A(0)(i) = delete i chars from t *)
+    for i = 0 to len2 do
+      A.unsafe_set v0 i i
+    done;
+    (* main loop for the bottom up dynamic algorithm *)
+    for i = 0 to len1 - 1 do
+      (* first edit distance is the deletion of i+1 elements from s *)
+      A.unsafe_set v1 0 (i + 1);
+      (* try add/delete/replace operations *)
+      for j = 0 to len2 - 1 do
+        (* i >= 0 && i < length s1 *)
+        (* j >= 0 && j < length s2 *)
+        let cost = if unsafe_get s1 i = unsafe_get s2 j then 0 else 1 in
+        A.unsafe_set v1 (j + 1)
+          (min
+             ((A.unsafe_get v1 j) + 1)
+             (min
+                ((A.unsafe_get v0 (j + 1)) + 1)
+                ((A.unsafe_get v0 j) + cost)));
+      done;
+      (* copy v1 into v0 for next iteration *)
+      A.blit v1 0 v0 0 (len2 + 1);
+    done;
+    A.unsafe_get v1 len2
+  end
+
+(*$T edit_distance
+  edit_distance "foo" "fo0" = 1
+  edit_distance "hello" "hell" = 1
+  edit_distance "kitten" "sitton" = 2
+*)
+
+(*$Q edit_distance
+  Q.(pair string string) (fun (s1, s2) -> edit_distance s1 s2 = edit_distance s2 s1)
+*)
+
+let print = BatInnerIO.nwrite
+let println out s = BatInnerIO.nwrite out s; BatInnerIO.write out '\n'
+
+(*$T
+  BatIO.to_string print "\n" = "\n"
+  BatIO.to_string println "\n" = "\n\n"
+  BatIO.to_string print_quoted "\n" = "\"\\n\""
+  quote "\n" = "\"\\n\""
+*)
+
+(* Beware: the documentation of print_quoted claims that its behavior
+   is compatible with this "quote" function. This is currently true as
+   they both use "%S", but any change in 'quote' here should be
+   careful to preserve this consistency. *)
+let quote s = Printf.sprintf "%S" s
+(*$T quote
+   quote "foo" = "\"foo\""
+   quote "\"foo\"" = "\"\\\"foo\\\"\""
+   quote "\n" = "\"\\n\""
+*)
+
+let print_quoted out s = BatInnerIO.nwrite out (quote s)
+
+module Exceptionless =
+struct
+  let find_from str ofs sub =
+    try Some (find_from str ofs sub) with Not_found -> None
+
+  let find str sub = find_from str 0 sub
+  (*$T
+    Exceptionless.find "a" "b" = None
+  *)
+
+  let rfind_from str suf sub =
+    try Some (rfind_from str suf sub) with Not_found -> None
+
+  let rfind str sub = rfind_from str (String.length str - 1) sub
+  (*$T
+    Exceptionless.rfind "a" "b" = None
+  *)
+
+  let to_int s = try Some (to_int s) with Failure _ -> None
+  (*$T
+    Exceptionless.to_int "" = None
+  *)
+
+  let to_float s = try Some (to_float s) with Failure _ -> None
+  (*$T
+    Exceptionless.to_float "" = None
+  *)
+
+  let index s c = try Some (index s c) with Not_found -> None
+  (*$T
+    Exceptionless.index "a" 'b' = None
+  *)
+
+  let index_from s i c = try Some (index_from s i c) with Not_found -> None
+  (*$T
+    Exceptionless.index_from "a" 0 'b' = None
+  *)
+
+  let rindex_from s i c = try Some (rindex_from s i c) with Not_found -> None
+  (*$T
+    Exceptionless.rindex_from "a" 0 'b' = None
+  *)
+
+  let rindex s c = try Some (rindex s c) with Not_found -> None
+  (*$T
+    Exceptionless.rindex "a" 'b' = None
+  *)
+
+  let split str ~by = try Some (split str ~by) with Not_found -> None
+  (*$T
+    Exceptionless.split "a" ~by:"e" = None
+  *)
+
+  let rsplit str ~by = try Some (rsplit str ~by) with Not_found -> None
+  (*$T
+    Exceptionless.rsplit "a" ~by:"e" = None
+  *)
+end (* String.Exceptionless *)
+
+##V<4.5##let index_opt = Exceptionless.index
+##V<4.5##let rindex_opt = Exceptionless.rindex
+##V<4.5##let index_from_opt = Exceptionless.index_from
+##V<4.5##let rindex_from_opt = Exceptionless.rindex_from
+
+
+external get_uint8 : string -> int -> int = "%string_safe_get"
+##V>=4.08##let get_int8 s i = Bytes.(get_int8 (unsafe_of_string s) i)
+##V>=4.08##let get_uint16_le s i = Bytes.(get_uint16_le (unsafe_of_string s) i)
+##V>=4.08##let get_uint16_be s i = Bytes.(get_uint16_be (unsafe_of_string s) i)
+##V>=4.08##let get_uint16_ne s i = Bytes.(get_uint16_ne (unsafe_of_string s) i)
+##V>=4.08##let get_int16_ne s i = Bytes.(get_int16_ne (unsafe_of_string s) i)
+##V>=4.08##let get_int16_le s i = Bytes.(get_int16_le (unsafe_of_string s) i)
+##V>=4.08##let get_int16_be s i = Bytes.(get_int16_be (unsafe_of_string s) i)
+##V>=4.08##let get_int32_le s i = Bytes.(get_int32_le (unsafe_of_string s) i)
+##V>=4.08##let get_int32_be s i = Bytes.(get_int32_be (unsafe_of_string s) i)
+##V>=4.08##let get_int32_ne s i = Bytes.(get_int32_ne (unsafe_of_string s) i)
+##V>=4.08##let get_int64_le s i = Bytes.(get_int64_le (unsafe_of_string s) i)
+##V>=4.08##let get_int64_be s i = Bytes.(get_int64_be (unsafe_of_string s) i)
+##V>=4.08##let get_int64_ne s i = Bytes.(get_int64_ne (unsafe_of_string s) i)
+
+module Cap =
+struct
+  type 'a t = Bytes.t
+  let ubos = Bytes.unsafe_of_string
+  let usob = Bytes.unsafe_to_string
+
+  let make          = Bytes.make
+  let is_empty b    = is_empty (usob b)
+  let init n f      = ubos (init n f)
+  let enum b        = enum (usob b)
+  let of_enum e     = ubos (of_enum e)
+  let backwards b   = backwards (usob b)
+  let of_backwards e = ubos (of_backwards e)
+
+  let of_int n      = ubos (of_int n)
+  let of_float x    = ubos (of_float x)
+  let of_char c     = ubos (of_char c)
+  let to_int b      = to_int (usob b)
+  let to_float b    = to_float (usob b)
+  let map f b       = ubos (map f (usob b))
+  let mapi f b      = ubos (mapi f (usob b))
+  let fold_left f v b = fold_left f v (usob b)
+  let fold_right f b v = fold_right f (usob b) v
+  let fold_lefti f v b = fold_lefti f v (usob b)
+  let fold_righti f b v = fold_righti f (usob b) v
+  let iter f b      = iter f (usob b)
+  let index b c     = index (usob b) c
+  let rindex b c    = rindex (usob b) c
+  let index_from b i c = index_from (usob b) i c
+  let rindex_from b i c = rindex_from (usob b) i c
+  let contains b c  = contains (usob b) c
+  let contains_from b i c = contains_from (usob b) i c
+  let rcontains_from b i c = rcontains_from (usob b) i c
+  let find b1 b2    = find (usob b1) (usob b2)
+  let find_from b1 i b2 = find_from (usob b1) i (usob b2)
+  let rfind b1 b2   = rfind (usob b1) (usob b2)
+  let rfind_from b1 i b2 = rfind_from (usob b1) i (usob b2)
+  let ends_with b1 b2 = ends_with (usob b1) (usob b2)
+  let starts_with b1 b2   = starts_with (usob b1) (usob b2)
+  let exists b1 b2  = exists (usob b1) (usob b2)
+  let count_char s c = count_char (usob s) c
+  let lchop ?n b    = ubos (lchop ?n (usob b))
+  let rchop ?n b    = ubos (rchop ?n (usob b))
+  let chop ?l ?r b  = ubos (chop ?l ?r (usob b))
+  let strip ?(chars = ubos strip_default) b =
+    ubos (strip ~chars:(usob chars) (usob b))
+##V<5## let uppercase b   = ubos (uppercase (usob b))
+##V<5## let lowercase b   = ubos (lowercase (usob b))
+##V<5## let capitalize b  = ubos (capitalize (usob b))
+##V<5## let uncapitalize b = ubos (uncapitalize (usob b))
+##V>=5##  let uppercase_ascii b    = ubos (uppercase_ascii (usob b))
+##V>=5##  let lowercase_ascii b    = ubos (lowercase_ascii (usob b))
+##V>=5##  let capitalize_ascii b   = ubos (capitalize_ascii (usob b))
+##V>=5##  let uncapitalize_ascii b = ubos (uncapitalize_ascii (usob b))
+  let copy          = Bytes.copy
+  let sub           = Bytes.sub
+  let fill          = Bytes.fill
+  let blit          = Bytes.blit
+  let concat        = Bytes.concat
+  let escaped       = Bytes.escaped
+  let replace_chars f b = ubos (replace_chars (fun c -> usob (f c)) (usob b))
+  let replace ~str ~sub ~by =
+    let (b, s) = replace ~str:(usob str) ~sub:(usob sub) ~by:(usob by) in
+    (b, ubos s)
+  let nreplace ~str ~sub ~by =
+    ubos (nreplace ~str:(usob str) ~sub:(usob sub) ~by:(usob by))
+  let split b ~by   =
+    let (a, b) = split (usob b) ~by:(usob by) in
+    (ubos a, ubos b)
+  let repeat b i    = ubos (repeat (usob b) i)
+  let rsplit b ~by   =
+    let (a, b) = rsplit (usob b) ~by:(usob by) in
+    (ubos a, ubos b)
+  let nsplit b ~by  = List.map ubos (nsplit (usob b) ~by:(usob by))
+  let split_on_string ~by b = List.map ubos (split_on_string ~by:(usob by) (usob b))
+  let join          = Bytes.concat
+  let slice ?first ?last b = ubos (slice ?first ?last (usob b))
+  let explode b     = explode (usob b)
+  let implode cs    = ubos (implode cs)
+  let compare b1 b2 = compare (usob b1) (usob b2)
+  let icompare b1 b2 = icompare (usob b1) (usob b2)
+  let splice b1 i1 i2 b2 = ubos (splice (usob b1) i1 i2 (usob b2))
+  let trim b        = ubos (trim (usob b))
+  let quote b       = quote (usob b)
+  let left b i      = ubos (left (usob b) i)
+  let right b i     = ubos (right (usob b) i)
+  let head b i      = ubos (head (usob b) i)
+  let tail b i      = ubos (tail (usob b) i)
+  let filter_map f b = ubos (filter_map f (usob b))
+  let filter f b    = ubos (filter f (usob b))
+  let of_list li    = ubos (of_list li)
+  let to_list b     = to_list (usob b)
+
+  let print io b       = print io (usob b)
+  let println io b     = println io (usob b)
+  let print_quoted io b = print_quoted io (usob b)
+
+  external of_string : Bytes.t -> _ t  = "%identity"
+  external of_bytes : Bytes.t -> _ t  = "%identity"
+  external to_string : [`Read | `Write] t -> Bytes.t = "%identity"
+  external to_bytes : [`Read | `Write] t -> Bytes.t = "%identity"
+  external read_only : [> `Read] t -> [`Read] t     = "%identity"
+  external write_only: [> `Write] t -> [`Write] t   = "%identity"
+
+  external length : _ t -> int = "%string_length"
+  external get : [> `Read] t -> int -> char = "%string_safe_get"
+  external set : [> `Write] t -> int -> char -> unit = "%string_safe_set"
+  external create : int -> _ t = "caml_create_string"
+  external unsafe_get : [> `Read] t -> int -> char = "%string_unsafe_get"
+  external unsafe_set : [> `Write] t -> int -> char -> unit = "%string_unsafe_set"
+  external unsafe_blit :
+    [> `Read] t -> int -> [> `Write] t -> int -> int -> unit = "caml_blit_string" "noalloc"
+  external unsafe_fill :
+    [> `Write] t -> int -> int -> char -> unit = "caml_fill_string" "noalloc"
+
+  module Exceptionless =
+  struct
+    let find_from b1 i b2 = Exceptionless.find_from (usob b1) i (usob b2)
+    let find b1 b2 = Exceptionless.find (usob b1) (usob b2)
+    let rfind_from b1 i b2 = Exceptionless.rfind_from (usob b1) i (usob b2)
+    let rfind b1 b2 = Exceptionless.rfind (usob b1) (usob b2)
+    let to_int b = Exceptionless.to_int (usob b)
+    let to_float b = Exceptionless.to_float (usob b)
+    let index b c = Exceptionless.index (usob b) c
+    let index_from b i c = Exceptionless.index_from (usob b) i c
+    let rindex_from b i c = Exceptionless.rindex_from (usob b) i c
+    let rindex b c = Exceptionless.rindex (usob b) c
+    let split b ~by =
+      match Exceptionless.split (usob b) ~by:(usob by) with
+      | None -> None
+      | Some (a, b) -> Some (ubos a, ubos b)
+    let rsplit b ~by =
+      match Exceptionless.rsplit (usob b) ~by:(usob by) with
+      | None -> None
+      | Some (a, b) -> Some (ubos a, ubos b)
+  end (* String.Cap.Exceptionless *)
+
+end (* String.Cap *)

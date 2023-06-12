@@ -1,0 +1,108 @@
+(*
+ * BatBuffer - Additional buffer operations
+ * Copyright (C) 1999 Pierre Weis, Xavier Leroy
+ *               2009 David Teller, LIFO, Universite d'Orleans
+ *               2009 Dawid Toton
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version,
+ * with the special exception on linking described in file LICENSE.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *)
+
+
+include Buffer
+
+(** The underlying buffer type. *)
+type buffer =
+  {mutable buffer : string;(** Contents of the buffer *)
+   mutable position : int; (** The end of the buffer  *)
+   mutable length : int;   (** The size of the buffer *)
+   initial_buffer : string (** For resetting to the original size **)}
+
+external buffer_of_t : t -> buffer = "%identity"
+external t_of_buffer : buffer -> t = "%identity"
+
+let print out t =
+  BatString.print out (contents t)
+
+(*$Q print
+  (Q.string) (fun s -> let b = create 5 in add_string b "foo"; add_string b s; add_string b "bar"; BatIO.to_string print b = "foo" ^ s ^ "bar")
+*)
+
+let enum t =
+  BatString.enum (contents t)
+
+(*$Q enum
+  (Q.string) (fun s -> let b = create 10 in add_string b s; BatEnum.equal Char.equal (enum b) (BatString.enum s))
+*)
+
+let of_enum e =
+  let buf =
+    if BatEnum.fast_count e
+    then create (BatEnum.count e)
+    else create 128
+  in
+  add_string buf (BatString.of_enum e);
+  buf
+
+(*$Q of_enum
+  (Q.string) (fun s -> let b = of_enum (BatString.enum s) in contents b = s)
+  (Q.string) (fun s -> let e = BatString.enum s in \
+                       let e = BatEnum.from (fun () -> BatEnum.get_exn e) in \
+                       contents (of_enum e) = s)
+*)
+
+let add_input t inp n =
+  add_string t (BatInnerIO.really_nread inp n)
+
+(*$Q add_input
+  (Q.string) (fun s -> let b = create 10 in add_input b (BatIO.input_string s) (String.length s); contents b = s)
+*)
+
+let add_channel = add_input
+
+##V<4.2##let add_bytes = add_string
+##V<4.2##let add_subbytes = add_substring
+##V<4.2##let to_bytes = contents
+
+let output_buffer buf =
+  BatInnerIO.create_out
+    ~write: (add_char buf)
+    ~output:(fun s p l -> add_subbytes buf s p l; l)
+    ~close: (fun () -> contents buf)
+    ~flush: BatInnerIO.noop
+
+(*$Q output_buffer
+  (Q.string) (fun s -> let b = create 10 in let oc = output_buffer b in IO.nwrite oc s; IO.close_out oc = s)
+*)
+
+##V>=4.07##let to_seq = to_seq
+##V>=4.07##let to_seqi = to_seqi
+##V>=4.07##let add_seq = add_seq
+##V>=4.07##let of_seq = of_seq
+
+##V>=4.08##let add_uint8 = add_uint8
+##V>=4.08##let add_int8 = add_int8
+##V>=4.08##let add_uint16_ne = add_uint16_ne
+##V>=4.08##let add_uint16_be = add_uint16_be
+##V>=4.08##let add_uint16_le = add_uint16_le
+##V>=4.08##let add_int16_ne = add_int16_ne
+##V>=4.08##let add_int16_be = add_int16_be
+##V>=4.08##let add_int16_le = add_int16_le
+##V>=4.08##let add_int32_ne = add_int32_ne
+##V>=4.08##let add_int32_be = add_int32_be
+##V>=4.08##let add_int32_le = add_int32_le
+##V>=4.08##let add_int64_ne = add_int64_ne
+##V>=4.08##let add_int64_be = add_int64_be
+##V>=4.08##let add_int64_le = add_int64_le

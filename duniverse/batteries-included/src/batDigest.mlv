@@ -1,0 +1,97 @@
+(*
+ * BatDigest - Additional functions for message digests
+ * Copyright (C) 1996 Xavier Leroy, INRIA Rocquencourt
+ * Copyright (C) 2009 David Teller, LIFO, Universite d'Orleans
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version,
+ * with the special exception on linking described in file LICENSE.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *)
+
+include Digest
+
+##V>=5##(*$inject
+##V>=5##  module Pervasives = Stdlib
+##V>=5##*)
+
+(*Imported from [Digest.input] -- the functions used take advantage of
+  [BatIO.input] rather than [in_channel]*)
+let input inp = BatIO.really_nread inp 16
+(*$T
+  let digest = Digest.string "azerty" in \
+  input (BatIO.input_string digest) = digest
+*)
+
+let output = BatIO.nwrite
+let print oc t = BatIO.nwrite oc (to_hex t)
+
+let channel inp len = (*TODO: Make efficient*)
+  if len >= 0
+  then Digest.string (BatIO.really_nread inp len)
+  else Digest.channel (BatIO.to_input_channel inp) len
+(*$T
+  let digest = Digest.string "azerty" in \
+  channel (BatIO.input_string ("azertyuiop")) 6 = digest
+*)
+
+(*1. Compute the digest of this file using Legacy.Digest*)
+(*2. Compute the digest of this file using Batteries.Digest*)
+(*3. Compare*)
+(*$R channel
+  let legacy_result () =
+  let inp    = Pervasives.open_in_bin Sys.argv.(0) in
+  let result = Legacy.Digest.channel inp (-1) in
+    Pervasives.close_in inp;
+    result
+  in
+  let batteries_result () =
+  let inp    = BatFile.open_in Sys.argv.(0) in
+  let result = channel inp (-1)   in
+    BatIO.close_in inp;
+    result
+  in
+  assert_equal ~printer:(Printf.sprintf "%S")
+    (legacy_result ()) (batteries_result ())
+*)
+
+let from_hex s =
+  if String.length s <> 32 then invalid_arg "Digest.from_hex";
+  let digit c =
+    match c with
+    | '0'..'9' -> Char.code c - Char.code '0'
+    | 'A'..'F' -> Char.code c - Char.code 'A' + 10
+    | 'a'..'f' -> Char.code c - Char.code 'a' + 10
+    | _ -> invalid_arg "Digest.from_hex"
+  in
+  let byte i = digit s.[i] lsl 4 + digit s.[i+1] in
+  BatBytesCompat.string_init 16 (fun i -> Char.chr (byte (2 * i)))
+
+(*$Q
+  Q.string (fun s -> \
+    let h = string s in h |> to_hex |> from_hex = h)
+*)
+
+let compare = String.compare
+
+##V<4.2##let bytes = string
+##V<4.2##let subbytes = substring
+
+##V<4.3##let equal d1 d2 = (compare d1 d2 = 0)
+(*$T
+  equal (string "foo") (string "foo")
+  equal (string "") (string "")
+  not @@ equal (string "foo") (string "bar")
+  not @@ equal (string "foo") (string "foo\000")
+  not @@ equal (string "foo") (string "")
+ *)

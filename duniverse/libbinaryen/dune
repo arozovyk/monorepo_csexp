@@ -1,0 +1,133 @@
+(library
+ (name libbinaryen_c)
+ (public_name libbinaryen.c)
+ (foreign_archives binaryen)
+ (c_library_flags :standard -lstdc++ -lpthread)
+ (install_c_headers binaryen-c)
+ (js_of_ocaml
+  (javascript_files binaryen.es5.js)))
+
+(install
+ (section lib)
+ (package libbinaryen)
+ (files
+  (wasm-delegations.def as c/wasm-delegations.def)))
+
+(rule
+ (targets binaryen-c.h wasm-delegations.def)
+ (deps
+  (source_tree binaryen))
+ (action
+  (no-infer
+   (progn
+    (copy binaryen/src/binaryen-c.h binaryen-c.h)
+    (copy binaryen/src/wasm-delegations.def wasm-delegations.def)))))
+
+(rule
+ (targets libbinaryen.a)
+ (locks binaryen)
+ (deps
+  (source_tree binaryen))
+ (action
+  (no-infer
+   (progn
+    (run
+     cmake
+     -S
+     binaryen
+     -B
+     binaryen
+     -G
+     "Unix Makefiles"
+     "-DCMAKE_CXX_FLAGS=-Wno-unused-variable -Wno-maybe-uninitialized"
+     -DBUILD_TESTS=OFF
+     -DBUILD_TOOLS=OFF
+     -DBUILD_STATIC_LIB=ON
+     -DCMAKE_BUILD_TYPE=Release
+     -DCMAKE_INSTALL_PREFIX=binaryen)
+    (run cmake --build binaryen --config Release -- -j4)
+    (copy binaryen/lib/libbinaryen.a libbinaryen.a)))))
+
+(rule
+ (target dllbinaryen.so)
+ (locks binaryen)
+ (deps
+  (source_tree binaryen))
+ (enabled_if
+  (= %{system} macosx))
+ (action
+  (no-infer
+   (progn
+    (run
+     cmake
+     -S
+     binaryen
+     -B
+     binaryen
+     -G
+     "Unix Makefiles"
+     "-DCMAKE_CXX_FLAGS=-Wno-unused-variable -Wno-maybe-uninitialized"
+     -DBUILD_TESTS=OFF
+     -DBUILD_TOOLS=OFF
+     -DBUILD_STATIC_LIB=OFF
+     -DCMAKE_BUILD_TYPE=Release
+     -DCMAKE_INSTALL_PREFIX=binaryen)
+    (run cmake --build binaryen --config Release -- -j4)
+    (copy binaryen/lib/libbinaryen.dylib dllbinaryen.so)))))
+
+(rule
+ (target dllbinaryen.so)
+ (locks binaryen)
+ (deps
+  (source_tree binaryen))
+ (enabled_if
+  (and
+   (<> %{system} macosx)
+   (<> %{system} mingw64)))
+ (action
+  (no-infer
+   (progn
+    (run
+     cmake
+     -S
+     binaryen
+     -B
+     binaryen
+     -G
+     "Unix Makefiles"
+     "-DCMAKE_CXX_FLAGS=-Wno-unused-variable -Wno-maybe-uninitialized"
+     -DBUILD_TESTS=OFF
+     -DBUILD_TOOLS=OFF
+     -DBUILD_STATIC_LIB=OFF
+     -DCMAKE_BUILD_TYPE=Release
+     -DCMAKE_INSTALL_PREFIX=binaryen)
+    (run cmake --build binaryen --config Release -- -j4)
+    (copy binaryen/lib/libbinaryen.so dllbinaryen.so)))))
+
+(rule
+ (target dllbinaryen.dll)
+ (locks binaryen)
+ (deps
+  (source_tree binaryen))
+ (enabled_if
+  (= %{system} mingw64))
+ (action
+  (no-infer
+   (progn
+    (run
+     cmake
+     -S
+     binaryen
+     -B
+     binaryen
+     -G
+     "Unix Makefiles"
+     "-DCMAKE_CXX_FLAGS=-Wno-unused-variable -Wno-maybe-uninitialized"
+     -DBUILD_TESTS=OFF
+     -DBUILD_TOOLS=OFF
+     -DCMAKE_SHARED_LIBRARY_PREFIX_CXX=lib
+     -DBUILD_STATIC_LIB=OFF
+     -DCMAKE_BUILD_TYPE=Release
+     -DCMAKE_INSTALL_PREFIX=binaryen)
+    (run cmake --build binaryen --config Release -- -j4)
+    (copy binaryen/bin/libbinaryen.dll dllbinaryen.dll)))))
